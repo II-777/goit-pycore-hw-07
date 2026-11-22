@@ -24,7 +24,7 @@ def input_error(func):
             if func.__name__ == "change_contact":
                 return "Give me name, old phone and new phone please."
             return "Give me name and phone please."
-        except KeyError:
+        except (KeyError, AttributeError):
             return "Contact not found."
         except IndexError:
             return "Enter user name."
@@ -68,17 +68,23 @@ class Phone(Field):
 
 
 class Birthday(Field):
-    """Дата народження у форматі DD.MM.YYYY. У value лежить date."""
+    """Дата народження. value є рядком формату DD.MM.YYYY."""
 
-    def __init__(self, value):
+    @property
+    def value(self):
+        return self._value
+
+    @value.setter
+    def value(self, value):
         try:
-            parsed = datetime.strptime(value, "%d.%m.%Y").date()
+            datetime.strptime(value, "%d.%m.%Y")
         except (ValueError, TypeError):
             raise ValueError("Invalid date format. Use DD.MM.YYYY")
-        super().__init__(parsed)
+        self._value = value
 
-    def __str__(self):
-        return self.value.strftime("%d.%m.%Y")
+    @property
+    def data(self):
+        return datetime.strptime(self.value, "%d.%m.%Y").date()
 
 
 class Record:
@@ -159,9 +165,9 @@ class AddressBook(UserDict):
         for record in self.data.values():
             if record.birthday is None:
                 continue
-            birthday = record.birthday.value.replace(year=today.year)
+            birthday = record.birthday.data.replace(year=today.year)
             if birthday < today:
-                birthday = record.birthday.value.replace(year=today.year + 1)
+                birthday = record.birthday.data.replace(year=today.year + 1)
             if 0 <= (birthday - today).days <= days:
                 congratulation = _next_workday(birthday)
                 upcoming.append({
@@ -196,8 +202,6 @@ def change_contact(args, book: AddressBook) -> str:
     """Замінює старий номер наявного контакту на новий."""
     name, old_phone, new_phone = args
     record = book.find(name)
-    if record is None:
-        raise KeyError
     record.edit_phone(old_phone, new_phone)
     return "Contact updated."
 
@@ -207,8 +211,6 @@ def show_phone(args, book: AddressBook) -> str:
     """Повертає номери телефону за ім'ям."""
     name = args[0]
     record = book.find(name)
-    if record is None:
-        raise KeyError
     if not record.phones:
         return "No phone number saved."
     return "; ".join(phone.value for phone in record.phones)
@@ -227,8 +229,6 @@ def add_birthday(args, book: AddressBook) -> str:
     """Додає день народження контакту у форматі DD.MM.YYYY."""
     name, birthday = args
     record = book.find(name)
-    if record is None:
-        raise KeyError
     record.add_birthday(birthday)
     return "Birthday added."
 
@@ -238,8 +238,6 @@ def show_birthday(args, book: AddressBook) -> str:
     """Повертає день народження контакту."""
     name = args[0]
     record = book.find(name)
-    if record is None:
-        raise KeyError
     if record.birthday is None:
         return "Birthday not saved."
     return str(record.birthday)
